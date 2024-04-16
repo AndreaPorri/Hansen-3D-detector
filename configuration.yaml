@@ -1,0 +1,65 @@
+                                                ############################
+
+                                                #       model_cp.py
+
+                                                ############################
+
+
+### PARAMETRI NUMERICI ###
+
+color_width: #1920
+    1920
+color_height: #1080
+    1080
+depth_width: #1024
+    1024
+depth_height: #768
+    768
+
+### PATH SPECIFICI ###
+
+pc_segframe_path: # Path della directory per i salvataggi
+    'D:/point_clouds'
+weights_path: # Path dei pesi preaddestrati di YOLOv8
+    'C:/Users/andre/OneDrive/Desktop/MAGISTRALE/Progetto_ADIP/runs/segment/train_m_32/weights/best.pt'
+pc_path: # Path dove salvare le point cloud
+    'D:/point_clouds/data_{}_{}_color.ply'
+seg_path: # Path dove salvare i segmented RGB frame
+    'D:/point_clouds/image_{}_{}.jpg'
+
+
+### SET FILTRI ###
+use_visual_preset: # si: utilizza dei preset di visualizzazione, no: non li utilizza
+    'no'
+visual_preset_chose: # Regola questo valore in base al preset desiderato (0 per Max Range, 1 per Short Range, 2 per No Ambient Light, 3 per Low Ambient Light)
+    3
+max_distance_meters: # Imposta la distanza massima consentita (in metri) oltre la quale le depth rilevate vengono impostate a 0.
+    0.70
+
+                                                ############################
+
+                                                #       icp_align.py
+
+                                                ############################
+
+### PATH SPECIFICI ###
+
+path_env_pc: # Path per le PointCloud target
+    'D:/point_clouds_target'
+model_path: # Path per le PointCloud source (modello per il matching)
+    'D:/point_clouds1/data_86_0_color.ply'    
+
+
+### Parametri Preprocess ###
+change_color_pc: # Impostato su "si" esegue una colorazione artificiale della PointCloud
+    'no'        
+
+### Parametri Allineamento ###   
+check_alignments: # Esegue una trasformazione rigida dimostrativa se impostata su "si"
+    'si'
+icp_selection: # Selezione modello ICP da utilizzare per la local registration: 'point_to_point', 'point_to_plane' o 'colored_icp' (con change_color_pc == 'no')
+    'point_to_plane'
+threshold: # Valore in metri della soglia
+    0.001          
+max_iteration: # Iterazioni da eseguire prima dello stop dell'allineamento
+    100000
