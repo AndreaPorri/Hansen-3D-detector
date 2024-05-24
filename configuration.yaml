@@ -38,6 +38,17 @@ max_distance_meters: # Imposta la distanza massima consentita (in metri) oltre l
 
                                                 ############################
 
+                                                #     model_pc_align.py
+
+                                                ############################
+### PATH SPECIFICI ###
+input_folder: # Crearla manualmente e carica li le point cloud da utilizzare per la creazione del modello intero. 
+    'D:/input_folder'
+folder_model_path:
+    'D:/folder_model_path'   
+   
+                                                ############################
+
                                                 #       icp_align.py
 
                                                 ############################
@@ -47,7 +58,7 @@ max_distance_meters: # Imposta la distanza massima consentita (in metri) oltre l
 path_env_pc: # Path per le PointCloud target
     'D:/point_clouds_target'
 model_path: # Path per le PointCloud source (modello per il matching)
-    'D:/point_clouds1/data_86_0_color.ply'    
+    'D:/data_95_0_color.ply'    
 
 
 ### Parametri Preprocess ###
@@ -60,6 +71,7 @@ check_alignments: # Esegue una trasformazione rigida dimostrativa se impostata s
 icp_selection: # Selezione modello ICP da utilizzare per la local registration: 'point_to_point', 'point_to_plane' o 'colored_icp' (con change_color_pc == 'no')
     'point_to_plane'
 threshold: # Valore in metri della soglia
-    0.001          
+    0.0005          
 max_iteration: # Iterazioni da eseguire prima dello stop dell'allineamento
-    100000
+    1000000
+

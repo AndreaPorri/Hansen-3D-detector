@@ -1,10 +1,12 @@
+import os
 import cv2
 import numpy as np
 import pyrealsense2 as rs
 from ultralytics import YOLO
 import yaml
-import os
 import copy
+
+
 
 # Funzione per la creazione delle directory di salvataggio
 def create_folder_if_not_exists(folder_path:str) -> None:
@@ -66,8 +68,10 @@ def load_hyperparams(pathConfiguratorYaml:str) -> tuple:
     threshold = yaml_configurator['threshold']
     change_color_pc = yaml_configurator['change_color_pc']
     max_iteration = yaml_configurator['max_iteration']
+    input_folder = yaml_configurator['input_folder']
+    folder_model_path = yaml_configurator['folder_model_path']
    
-    return color_width, color_height, depth_width, depth_height, pc_segframe_path, weights_path, pc_path, seg_path, use_visual_preset, visual_preset_chose, max_distance_meters, icp_selection, path_env_pc, model_path, check_alignments, threshold, change_color_pc, max_iteration
+    return color_width, color_height, depth_width, depth_height, pc_segframe_path, weights_path, pc_path, seg_path, use_visual_preset, visual_preset_chose, max_distance_meters, icp_selection, path_env_pc, model_path, check_alignments, threshold, change_color_pc, max_iteration, input_folder, folder_model_path
 
 # Funzione che trasforma un array numpy di coord 3D in una point cloud a colori
 def save_colored_ply(filename: str, points: np.array, colors: np.array) -> None:
@@ -146,7 +150,7 @@ if __name__ == "__main__":
     # Path del file di configurazione Yaml
     pathConfiguratorYaml = 'C:/Users/andre/OneDrive/Desktop/MAGISTRALE/Progetto_ADIP/configuration.yaml'
     # Assegna i valori della tupla alle rispettive variabili
-    color_width, color_height, depth_width, depth_height, pc_segframe_path, weights_path, pc_path, seg_path, use_visual_preset, visual_preset_chose, max_distance_meters, _, _, _, _, _, _, _ = load_hyperparams(pathConfiguratorYaml)
+    color_width, color_height, depth_width, depth_height, pc_segframe_path, weights_path, pc_path, seg_path, use_visual_preset, visual_preset_chose, max_distance_meters, _, _, _, _, _, _, _, _, _ = load_hyperparams(pathConfiguratorYaml)
     
     # Crea la directory per i salvataggi di point cloud e corrispondenti frame segmentati
     create_folder_if_not_exists(pc_segframe_path)    
@@ -209,7 +213,6 @@ if __name__ == "__main__":
     max_distance = max_distance_meters / depth_scale
 
     # Visualizzazione delle immagini
-    # Crea finestre di visualizzazione con dimensioni iniziali adatte al frame
     cv2.namedWindow('2D Object Segmentation', cv2.WINDOW_NORMAL) # Grafico che mostra la segmentation nel flusso di RGB frames 
     cv2.namedWindow('Depth Frame', cv2.WINDOW_NORMAL) # Grafico che mostra la depth in scala di grigi nel flusso di Depth frames 
     cv2.namedWindow('Object Segmentation Mask', cv2.WINDOW_NORMAL) # Grafico che mostra l'oggetto segmentato con una maschera bianco-nero
@@ -249,10 +252,14 @@ if __name__ == "__main__":
             depth_image = np.asanyarray(depth_frame.get_data())
             color_image_for_detection = copy.deepcopy(color_image) # Crea una copia che verrà utilizzata per la segmentation
             
+            
+            
             ### Filtra Depth Frame ###
             # Applica il filtro sulla max distance per ignorare le depth che eccedono tale soglia
             depth_image = np.where(depth_image <= max_distance, depth_image, 0)
-
+        
+            
+            
             ### Object Segmentation ###      
             # Esegue inferenza (segmentazione) con YOLOv8 sul frame RGB per rilevare il connettore
             detections = model(color_image_for_detection)

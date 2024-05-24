@@ -97,13 +97,13 @@ def preprocess_point_cloud(pcd:o3d.geometry.PointCloud, threshold:float) -> tupl
     
     # Imposta un valore, pari alla threshold, per il raggio utilizzato per la stima delle normali
     radius_normal = threshold
-    print(":: Stima delle normali con raggio di ricerca %.3f." % radius_normal)
+    print(":: Estimation of normals with search radius %.3f." % radius_normal)
     pcd_normal.estimate_normals(
         o3d.geometry.KDTreeSearchParamHybrid(radius=radius_normal, max_nn = 100))
     
     # Calcola le caratteristiche FPFH con un raggio di ricerca
     radius_feature = threshold * 2.5
-    print(":: Calcolo delle caratteristiche FPFH con raggio di ricerca %.3f." % radius_feature)
+    print(":: Calculation of FPFH characteristics with search radius %.3f." % radius_feature)
     pcd_fpfh = o3d.pipelines.registration.compute_fpfh_feature(
         pcd_normal,
         o3d.geometry.KDTreeSearchParamHybrid(radius=radius_feature, max_nn=100))
@@ -111,7 +111,7 @@ def preprocess_point_cloud(pcd:o3d.geometry.PointCloud, threshold:float) -> tupl
     return pcd_normal, pcd_fpfh
 
 # Funzione per una pre-registrazione globale che non dipenda dalla trasformazione rigida iniziale
-def execute_global_registration(source:o3d.geometry.PointCloud, target:o3d.geometry.PointCloud, source_fpfh:o3d.geometry.PointCloud, target_fpfh:o3d.geometry.PointCloud, threshold:float):
+def global_registration(source:o3d.geometry.PointCloud, target:o3d.geometry.PointCloud, source_fpfh:o3d.geometry.PointCloud, target_fpfh:o3d.geometry.PointCloud, threshold:float):
     """
     Esegue una registrazione globale utilizzando le caratteristiche FPFH, così da ottenere un allineamento iniziale
     non dipendente da una trasformazione rigida.
@@ -128,8 +128,8 @@ def execute_global_registration(source:o3d.geometry.PointCloud, target:o3d.geome
     """
     # Imposta la soglia di distanza per la registrazione RANSAC
     distance_threshold = threshold * 1.5
-    print(":: Registrazione RANSAC sulle nuvole di punti.")
-    print("   Utilizziamo una soglia di distanza libera di %.3f." % distance_threshold)
+    print(":: RANSAC registration on point clouds.")
+    print("   We use a free distance threshold of %.3f." % distance_threshold)
     
     # Esegue la registrazione globale RANSAC basata sul matching di caratteristiche
     result = o3d.pipelines.registration.registration_ransac_based_on_feature_matching(
@@ -145,6 +145,90 @@ def execute_global_registration(source:o3d.geometry.PointCloud, target:o3d.geome
     
     return result
 
+# Funzione per la Local Registration che utilizza una global registration come inizializzazione per un refinmento locale
+def local_registration(icp_selection:str, source:o3d.geometry.PointCloud, target:o3d.geometry.PointCloud, source_norm:o3d.geometry.PointCloud, target_norm:o3d.geometry.PointCloud, threshold:float, result_ransac, max_iteration:int, color_width:int, color_height:int, change_color_pc) -> None:
+    '''
+    Funzione per eseguire l'allineamento locale tra due PointCloud utilizzando, a scelta, diverse varianti di ICP. Questo avviene a seguito
+    di una registrazione globale che serve a fornire un allineamento iniziale, non dipendente da una trasformazione rigida, utilie al corretto
+    funzionamento dell'ICP locale.
+    
+    Args:
+        icp_selection (str): Tipo di metodo di ICP da utilizzare: 'point_to_point', 'point_to_plane', 'colored_icp'
+        source (o3d.geometry.PointCloud): Point cloud source senza normali
+        target (o3d.geometry.PointCloud): Point cloud target senza normali
+        source_norm (o3d.geometry.PointCloud): Point cloud source con normali
+        target_norm (o3d.geometry.PointCloud): Nuvo cloud target con normali
+        threshold (float): Soglia utilizzata per il calcolo della distanza per l'allineamento
+        result_ransac: Risultato del RANSAC (global registration)
+        max_iteration (int): Numero massimo di iterazioni per l'ICP
+        color_width (int): Larghezza dell'immagine per la visualizzazione
+        color_height (int): Altezza dell'immagine per la visualizzazione
+        change_color_pc (str): Opzione per settare il colore artificiale delle PointCloud
+    '''
+    ### ICP point to point ###
+    if icp_selection == 'point_to_point':
+        # Imposta la soglia di distanza
+        distance_threshold = threshold * 0.4
+        print("Application of ICP Point to Point")
+        
+        # Applica l'allineamento point to point
+        reg_p2p = o3d.pipelines.registration.registration_icp(
+                    source, target, distance_threshold, result_ransac.transformation,
+                    o3d.pipelines.registration.TransformationEstimationPointToPoint(),
+                    o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=max_iteration))
+
+        # Stampa il risultato dell'allineamento
+        print(f'Transformation assessment:\n{reg_p2p}')
+        print("The transformation applied is:")
+        print(reg_p2p.transformation)
+        
+        # Visualizza il risultato dell'allineamento
+        draw_registration_result(source, target, reg_p2p.transformation, color_width, color_height, change_color_pc)
+
+    
+    ### ICP point to plane ###
+    if icp_selection == 'point_to_plane':
+        # Imposta la soglia di distanza
+        distance_threshold = threshold * 0.4
+        print("Application of ICP Point to Plane")
+        print(type(result_ransac.transformation))
+        # Applica l'allineamento
+        reg_p2l = o3d.pipelines.registration.registration_icp(
+                    source_norm, target_norm, distance_threshold, result_ransac.transformation,
+                    o3d.pipelines.registration.TransformationEstimationPointToPlane(),
+                    o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=max_iteration))
+
+        # Stampa il risultato dell'allineamento
+        print(f'Transformation assessment:\n{reg_p2l}')
+        print("The transformation applied is:")
+        print(reg_p2l.transformation)
+        
+        # Visualizza il risultato dell'allineamento
+        draw_registration_result(source, target, reg_p2l.transformation, color_width, color_height, change_color_pc)
+
+    
+    ### ICP Colored ###
+    if icp_selection == 'colored_icp' and change_color_pc == 'no':
+        # Imposta la soglia di distanza per l'ICP colorato
+        distance_threshold = threshold * 0.4
+        print("Application ofcolored ICP")
+        
+        # Applica l'allineamento ColoredICP utilizzando PointCloud colorate
+        reg_result = o3d.pipelines.registration.registration_colored_icp(
+            source_norm, target_norm, distance_threshold, result_ransac.transformation,
+            o3d.pipelines.registration.TransformationEstimationForColoredICP(),
+            o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=max_iteration))
+        
+        # Stampa il risultato dell'allineamento
+        print(f'Transformation assessment:\n{reg_result}')
+        print("The transformation applied is:")
+        print(reg_result.transformation)
+
+        # Visualizza il risultato dell'allineamento
+        draw_registration_result(source, target, reg_result.transformation, color_width, color_height, change_color_pc)
+
+
+
 
 ##########################################################################################################################################
 
@@ -159,7 +243,7 @@ if __name__ == "__main__":
     # Path del file di configurazione Yaml
     pathConfiguratorYaml = 'C:/Users/andre/OneDrive/Desktop/MAGISTRALE/Progetto_ADIP/configuration.yaml'
     # Assegna i valori della tupla alle rispettive variabili
-    color_width, color_height, depth_width, depth_height, _, weights_path, _, _, _, _, max_distance_meters, icp_selection, path_env_pc, model_path, check_alignments, threshold, change_color_pc, max_iteration = load_hyperparams(pathConfiguratorYaml)
+    color_width, color_height, depth_width, depth_height, _, weights_path, _, _, _, _, max_distance_meters, icp_selection, path_env_pc, model_path, check_alignments, threshold, change_color_pc, max_iteration, _, _ = load_hyperparams(pathConfiguratorYaml)
 
     # Crea la directory per i salvataggi di point cloud dell'enviroment
     create_folder_if_not_exists(path_env_pc) 
@@ -301,7 +385,7 @@ if __name__ == "__main__":
 
                     # Controlla che la PointCloud esista e sia salvata
                     if not os.path.exists('{}/data_{}_color.ply'.format(path_env_pc, count_frame)):
-                        raise ValueError('Controlla che salvi correttamente le PointCloud')
+                        raise ValueError('Check that it saves PointClouds correctly')
                     
                     
                     
@@ -328,10 +412,10 @@ if __name__ == "__main__":
 
                         # Visualizza graficamente la registrazione/allineamento iniziale tra le due nuvole di punti
                         draw_registration_result(source, target, trans_init, color_width, color_height, change_color_pc)
+                        
                         # Valuta la qualità dell'allineamento rigido
                         print("Allineamento rigido iniziale:")
-                        rigid_align = o3d.pipelines.registration.evaluate_registration(
-                            source, target, threshold, trans_init)
+                        rigid_align = o3d.pipelines.registration.evaluate_registration(source, target, threshold, trans_init)
                         print(rigid_align)
 
                     
@@ -350,10 +434,10 @@ if __name__ == "__main__":
                     draw_registration_result che mostra il risultato della registrazione graficamente.
 
                     '''
-                    result_ransac = execute_global_registration(source_norm, target_norm, source_fpfh, target_fpfh, threshold)
+                    result_ransac = global_registration(source_norm, target_norm, source_fpfh, target_fpfh, threshold)
                     
                     # Valutazione della registrazione globale
-                    print(f'Valutazione trasformazione RANSAC:\n{result_ransac}')
+                    print(f'RANSAC transformation assessment\n{result_ransac}')
                     # Visualizzazione della registrazione globale
                     draw_registration_result(source, target, result_ransac.transformation, color_width, color_height, change_color_pc)
 
@@ -369,67 +453,8 @@ if __name__ == "__main__":
                     Example: https://www.open3d.org/docs/release/tutorial/pipelines/icp_registration.html
                     Youtube: https://www.youtube.com/watch?v=CzbETzWgFrc&list=PLkmvobsnE0GEZugH1Di2Cr_f32qYkv7aN&index=10
                     '''
-                    ### ICP point to point ###
-                    if icp_selection == 'point_to_point':
-                        # Imposta la soglia di distanza
-                        distance_threshold = threshold * 0.4
-                        print("Applicazione dell'ICP Point to Point")
-                        
-                        # Applica l'allineamento point to point
-                        reg_p2p = o3d.pipelines.registration.registration_icp(
-                                    source, target, distance_threshold, result_ransac.transformation,
-                                    o3d.pipelines.registration.TransformationEstimationPointToPoint(),
-                                    o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=max_iteration))
-    
-                        # Stampa il risultato dell'allineamento
-                        print(f'Valutazione trasformazione:\n{reg_p2p}')
-                        print("La trasformazione applicata è:")
-                        print(reg_p2p.transformation)
-                        
-                        # Visualizza il risultato dell'allineamento
-                        draw_registration_result(source, target, reg_p2p.transformation, color_width, color_height, change_color_pc)
-
-                    
-                    ### ICP point to plane ###
-                    if icp_selection == 'point_to_plane':
-                        # Imposta la soglia di distanza
-                        distance_threshold = threshold * 0.4
-                        print("Applicazione dell'ICP Point to Plane")
-                        print(type(result_ransac.transformation))
-                        # Applica l'allineamento
-                        reg_p2l = o3d.pipelines.registration.registration_icp(
-                                    source_norm, target_norm, distance_threshold, result_ransac.transformation,
-                                    o3d.pipelines.registration.TransformationEstimationPointToPlane(),
-                                    o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=max_iteration))
-    
-                        # Stampa il risultato dell'allineamento
-                        print(f'Valutazione trasformazione:\n{reg_p2l}')
-                        print("La trasformazione applicata è:")
-                        print(reg_p2l.transformation)
-                        
-                        # Visualizza il risultato dell'allineamento
-                        draw_registration_result(source, target, reg_p2l.transformation, color_width, color_height, change_color_pc)
-
-                    
-                    ### ICP Colored ###
-                    if icp_selection == 'colored_icp' and change_color_pc == 'no':
-                        # Imposta la soglia di distanza per l'ICP colorato
-                        distance_threshold = threshold * 0.4
-                        print("Apply colored ICP")
-                        
-                        # Applica l'allineamento ColoredICP utilizzando PointCloud colorate
-                        reg_result = o3d.pipelines.registration.registration_colored_icp(
-                            source_norm, target_norm, distance_threshold, result_ransac.transformation,
-                            o3d.pipelines.registration.TransformationEstimationForColoredICP(),
-                            o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=max_iteration))
-                        
-                        # Stampa il risultato dell'allineamento
-                        print(f'Valutazione trasformazione:\n{reg_result}')
-                        print("La trasformazione applicata è:")
-                        print(reg_result.transformation)
-    
-                        # Visualizza il risultato dell'allineamento
-                        draw_registration_result(source, target, reg_result.transformation, color_width, color_height, change_color_pc)
+                   
+                    local_registration(icp_selection, source, target, source_norm, target_norm, threshold, result_ransac, max_iteration, color_width, color_height, change_color_pc)
 
 
             # Aggiornamento frame counter
